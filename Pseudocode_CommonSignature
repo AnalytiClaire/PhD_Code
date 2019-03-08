@@ -1,0 +1,543 @@
+############################################################################
+################# Quality Control ##########################################
+############################################################################
+
+
+library(oligo)
+library(affy)
+library(tcltk)
+library(widgetTools)
+library(DynDoc)
+library(tools)
+library(Biobase)
+library(tkWidgets)
+library(plyr)
+library(dendroextras)
+
+
+###############################
+######### MICROARRAY ##########
+###############################
+
+setwd("set/working/directory")
+#run program to choose .CEL files from directory
+data1_celfiles <- fileBrowser(textToShow = "Choose CEL files", testFun = hasSuffix("[cC][eE][lL]")) #indicate file names
+
+data1_data <- read.celfiles(data1_celfiles) #read files in
+
+data1_exprs <- exprs(data1_data) #isolate expression values into data frame
+
+
+#run program to choose .CEL files from directory
+data2_celfiles <- fileBrowser(textToShow = "Choose CEL files", testFun = hasSuffix("[cC][eE][lL]"))
+
+data2_data <- read.celfiles(data2_celfiles)
+
+data2_exprs <- exprs(data2_data)
+
+
+setwd("/Volumes/Storage 1/TDP-43/Data/GeneExpressionAnalysis/Microarray/FTLD/")
+
+#run program to choose .CEL files from directory
+data3_celfiles <- fileBrowser(textToShow = "Choose CEL files", testFun = hasSuffix("[cC][eE][lL]"))
+
+data3_data <- read.celfiles(data3_celfiles)
+
+data3_exprs <- exprs(data3_data)
+
+
+#### REPEAT FOR HOWEVER MANY DATASETS YOU HAVE #####
+
+###############################
+######### RNA-Seq ##########
+###############################
+
+setwd("set/working/directory")
+data4_exprs <- read.csv("counts.csv")
+data4_exprs <- data4_exprs
+
+
+#### REPEAT FOR HOWEVER MANY DATASETS YOU HAVE #####
+
+###### ENSURE ALL FILES ARE EXPRESSION VALUES ONLY. COLUMNS ARE SAMPLES ROWS ARE TRANSCRIPTS ########
+
+dev.off() #removes previous plot
+setwd("directory/to/store/results")
+
+#################
+###### PCA ######
+#################
+
+analysis.name <- "Data1" #set analysis name
+data <- Data1_exprs #assign to generic variable name
+names <- colnames(Data1_exprs) #select colnames to label samples. Make sure your sample names are reasonable e.g. P_GSM12345 or C_GSM67890
+p <- 8 # Number of patients
+c <- 3 # Number of controls
+
+### Run PCA ###
+pca_2D <- prcomp(t(data)) #run on transformed data i.e. columns become rows and vice versa
+PC <- c(1,2) #select prinicple components
+pdf("Data1.pdf", width=11, height=8) #begin development of plot as PDF. This will save in the working directory. It will look better this way.
+plot(pca_2D$x[,PC], pch=18, cex=3, col=c(rep("darkturquoise",c), rep("salmon",p)),main = paste(analysis.name)) #plot the PCA
+legend(max(pca_2D$x[,1])-50000, max(pca_2D$x[,2])-10,pch=18, legend=c("Disease", "Control"), col=c("salmon","darkturquoise"), cex=1) #add legend. May need to adjust location
+text(pca_2D$x[,PC], labels = names, cex = 1) #label data points
+dev.off() #ends development. PDF will be written.
+
+
+#################
+### Box Plots ###
+#################
+logdata <- log2(data) #Take the log of the data for a more interpretable plot
+
+par(mar=c(4,1,1,1)) #set margins
+#plot boxplot
+boxplot(logdata,
+        col = c(rep("darkturquoise", c),
+                c(rep("salmon", p))),
+        names = names,
+        ylab = "Log2 Expression", 
+        las = 2, 
+        cex = 0.3,
+        cex.axis = 1)
+
+
+#################
+#### Cluster ####
+#################
+
+#Plot the dendrogram in black first, find out order of samples to add colour
+library(dendroextras)
+clust=colour_clusters(hclust(dist(t(data))), col = c(rep("black", ncol(data))), k = NULL, h = TRUE) #perform clustering
+set_leaf_colours(d=clust, col='black', col_to_set = "label")
+par(oma=c(2,0,0,0), cex = 0.6)
+plot(clust, xlab = "", sub = "")
+
+#Set right colours
+col = col=c("darkturquoise","salmon","salmon","darkturquoise","salmon",
+            "salmon", "salmon","salmon","salmon","darkturquoise","salmon")
+names(col) <- names
+
+#Replot
+clust=colour_clusters(hclust(dist(t(data))), col = col, k = NULL, h = TRUE)
+set_leaf_colours(d=clust, col=col, col_to_set = "label")
+par(mar=c(7,3,0,0), cex = 1)
+# clust %>% set("branches_lwd", 4)
+plot(clust, xlab = "", sub = "")
+
+
+############################################################################
+################# Pre-processing ###########################################
+############################################################################
+
+#For microarray preprocessing, please refer to file ""
+#For RNA-seq preprocessing, please refer to file ""
+
+
+
+############################################################################
+################# Common DEGs ##############################################
+############################################################################
+
+#Read in preprocessed expression files
+setwd("/location/of/preprocessed/expression/files")
+
+Data1 <- read.csv("Data1.csv")
+Data2 <- read.csv("Data2.csv")
+Data3 <- read.csv("Data3.csv")
+Data4 <- read.csv("Data4.csv")
+
+#set threshold for up/downregulation
+thresh <- 1 #the value that delineates "up" from "down". This may vary depending on whether you are using
+            #fold change or log2 fold change values
+
+#subset upregulated genes and extract gene names
+upData1 <- subset(Data1, Data1$FoldChange >= thresh)
+upData1gene <- upData1$GeneSymbol
+
+upData2 <- subset(Data2, Data2$FoldChange >= thresh)
+upData2gene <- upData2$GeneSymbol
+
+upData3 <- subset(Data3, Data3$FoldChange >= thresh)
+upData3gene <- upData3$GeneSymbol
+
+upData4 <- subset(Data4, Data4$FoldChange >= thresh)
+upData4gene <- upData4$GeneSymbol
+
+
+#find common gene names
+INTUP <- Reduce(intersect, list(upData1gene,upData2gene, upData3gene, upData4gene))
+
+
+
+#set threshold for up/downregulation
+thresh <- -1 #the value that delineates "up" from "down". This may vary depending on whether you are using
+#fold change or log2 fold change values
+
+#subset downregulated genes and extract gene names
+downData1 <- subset(Data1, Data1$FoldChange >= thresh)
+downData1gene <- downData1$GeneSymbol
+
+downData2 <- subset(Data2, Data2$FoldChange >= thresh)
+downData2gene <- downData2$GeneSymbol
+
+downData3 <- subset(Data3, Data3$FoldChange >= thresh)
+downData3gene <- downData3$GeneSymbol
+
+downData4 <- subset(Data4, Data4$FoldChange >= thresh)
+downData4gene <- downData4$GeneSymbol
+
+
+#find common gene names
+INTDOWN <- Reduce(intersect, list(downData1gene,downData2gene, downData3gene, downData4gene))
+
+
+### Repeat this process for all your filter datasets to generate individual common gene lists ###
+
+
+################
+### REMOVALS ###
+################
+
+#find overlap between dysregulated experimental genes and dysregulated filter genes
+upremove <- Reduce(intersect, list (INTUP, INTUP_filter1))
+downremove <- Reduce(intersect, list(INTDOWN, INTDOWN_filter1))
+
+##### REMOVE COMMON GENES ###
+resultsup <- subset(INTUP, !(INTUP %in% upremove))
+resultsdown <- subset(INTDOWN, !(INTDOWN %in% downremove))
+results <- c(resultsup, resultsdown) #bind into one list
+
+### Repeat for number of filter lists ###
+
+
+setwd("/set/save/location")
+write.table(resultsup, "UPgenes.txt", quote = F, row.names = F, col.names = F)
+write.table(resultsdown, "DOWNgenes.txt", quote = F, row.names = F, col.names = F)
+write.table(results, "ALLgenes.txt", quote = F, row.names = F, col.names = F)
+
+
+############################################################################
+################# Protein Interaction Network ##############################
+############################################################################
+library(biomaRt)
+
+#Read in PPI information. Should be a file with at least a "from" column and "to" column containing protein IDs
+PPI <- read.table("/read/in/protein/interaction/list")
+
+#read in common DEG list
+DEG_list <- readLines("/read/in/ALLgenes.txt")
+
+#use Biomart to find protein IDs for gene IDs
+mart <- useMart("ENSEMBL_MART_ENSEMBL",dataset="hsapiens_gene_ensembl", host="www.ensembl.org")
+attributes <- listAttributes(mart)
+mart_back <- getBM(attributes =c("hgnc_symbol", "uniprotswissprot"), filters="hgnc_symbol", values=DEG_list,  mart=mart)
+genelist_Uniprot <- subset(mart_back, !(mart_back$uniprotswissprot == ""))
+write.csv(genelist_Uniprot, "martback.csv", row.names = F)
+
+# IDENTIFY MISSING GENES AND FIND UNIPROT CODES FOR THEM. NB SOME GENES MAY NOT BE PROTEIN CODING #
+
+mart_table <- read.csv("martback.csv", header = T) #A table with the uniprot codes for the DEGs
+uniprot_gene <- mart_table$uniprotswissprot
+
+#Subset protein interaction table where at least one of the "from" or "to" IDs is a DEG protein
+DEG_PPI <- subset(PPI, PPI$V1 %in% uniprot_gene | PPI$V2 %in% uniprot_gene)
+rownames(DEG_PPI) <- 1:nrow(DEG_PPI)
+
+write.csv(DEG_PPI, "DEG_PPI_Data.csv", row.names = F)
+
+## Convert Uniprot ID to HGNC symbol. Biomart jumbles output so
+## Go To https://biodbnet-abcc.ncifcrf.gov/db/db2db.php submit each column of names. Select Uniprot Accession for input and Gene Symbol for output.
+# Select "NO" for remove duplicate input valies
+
+DEG_PPI <- read.csv("DEG_PPI_Data.csv")
+
+#remove rows with blank input
+DEG_PPI <- subset(DEG_PPI, DEG_PPI$Gene1 !="-")
+DEG_PPI <- subset(DEG_PPI, DEG_PPI$Gene2 !="-")
+
+write.csv(DEG_PPI, "FinalPDPPI.csv", row.names = F, quote = F)
+
+############################################################################
+################# Coexpression Network #####################################
+############################################################################
+setwd("")
+
+#generate a list of unique protein IDs from PPI network file and read in
+DEG_PPI <- readLines("DEG_PPI.txt")
+
+#subset expression data for just PPI network genes
+Data1 <- read.csv("Data1Expression.csv")
+rownames(Data1) <- Data1$Gene.Symbol #make gene symbols row names
+Data1 <- Data1[,10:20] #subset to include expression from only patients
+Data1 <- subset(Data1, rownames(Data1) %in% DEG_PPI) #subset to only include PPI nodes
+
+Data2 <- read.csv("Data2Expression.csv")
+rownames(Data2) <- Data2$Gene.Symbol
+Data2 <- Data2[,10:30]
+Data2 <- subset(Data2, rownames(Data2) %in% DEG_PPI)
+
+Data3 <- read.csv("Data3Expression.csv")
+rownames(Data3) <- Data3$Gene.Symbol
+Data3 <- Data3[,5:20]
+Data3 <- subset(Data3, rownames(Data3) %in% DEG_PPI)
+
+Data4 <- read.csv("Data4Expression.csv")
+rownames(Data4) <- Data4$Gene.Symbol
+Data4 <- Data4[,6:18]
+Data4 <- subset(Data4, rownames(Data4) %in% DEG_PPI)
+
+
+
+#Find the gene names that all datasets have in common
+DEG_com <- Reduce(intersect, list(rownames(Data1), 
+                                  rownames(Data2), 
+                                  rownames(Data3), 
+                                  rownames(Data4)))
+
+#Subset each dataset with these common names so they are all the same size
+Data1 <- subset(Data1, rownames(Data1) %in% DEG_com)
+Data2 <- subset(Data2, rownames(Data2) %in% DEG_com)
+Data3 <- subset(Data3, rownames(Data3) %in% DEG_com)
+Data4 <- subset(Data4, rownames(Data4) %in% DEG_com)
+
+
+setwd("")
+#Save expression files for correlation analysis
+write.csv(Data1, "Data1_DEGfilt.csv")
+write.csv(Data2, "Data2_DEGfilt.csv")
+write.csv(Data3, "Data3_DEGfilt.csv")
+write.csv(Data4, "Data4_DEGfilt.csv")
+
+############################################################################
+################# Coexpression Network #####################################
+############################################################################
+
+#Depending on the size of your files, it is recommended that larger files be analysed in parallel on
+#high performance computing resoures. If this is not possible, be prepared for long analysis times.
+
+#Example of correlation script
+
+Data1 <- read.csv("Data1_DEGfilt.csv")
+
+# Cor.test Method #
+
+library(tictoc)
+library(gdata)
+
+##For loop for generating regression values and p values
+CorExprMat <- t(Data1) #transpose
+test <- CorExprMat
+reg <- matrix(0, ncol(test), ncol(test)) #create blank matrix for Rho values
+p.value <- matrix(0, ncol(test), ncol(test)) #create blank matrix for P Values
+
+Sys.time()
+#Calculate Rho Values
+tic()
+for (i in 1:ncol(test)){
+  for (j in 1:ncol(test)){
+    reg[i,j] <- cor.test(test[,i], test[,j], method = "spearman")$estimate
+  }}
+
+rownames(reg) <- colnames(reg) <- colnames(test)
+toc()
+Sys.time()
+#Caluclate P Values
+tic()
+for (i in 1:ncol(test)){
+  for (j in 1:ncol(test)){
+    p.value[i,j] <- cor.test(test[,i], test[,j], method = "spearman")$p.value
+  }}
+
+rownames(p.value) <- colnames(p.value) <- colnames(test)
+toc()
+
+
+##Only take upper triangle without diagonal (all comparisons are currently doubled)
+ptri <- p.value
+ptri[lower.tri(ptri, diag = TRUE)] <- NA
+
+#Turn into vector
+p.vec <- unmatrix(ptri)
+#Remove NA values
+p.vec <- na.omit(p.vec)
+#Multiple hypothesis testing correction
+p.adj <- p.adjust(p.vec, method = "fdr", n = length(p.vec))
+
+#Create results table
+reg.mat <- unmatrix(reg)
+reg.mat <- as.data.frame(reg.mat)
+p.adj <- as.data.frame(p.adj)
+p.mat <- as.data.frame(p.vec)
+
+pvals <- merge(p.adj, p.mat, by.x = "row.names", by.y = "row.names")
+rownames(pvals)<- pvals$Row.names
+pvals[,1] <- NULL
+results <- merge(pvals, reg.mat, by.x = "row.names", by.y = "row.names")
+rownames(results)<- results$Row.names
+results[,1] <- NULL
+results <- results[order(results$p.vec),]
+
+setwd("")
+write.csv(results, "Data1_coexpression.csv")
+
+############################################################################
+################# Common Correlations ######################################
+############################################################################
+
+#### filter correlations
+setwd("")
+
+library(tidyverse)
+Data1 <- read_csv("Data1_coexpression.csv") #read in coexpression file. Use tidyverse read_csv as these files may be very large
+Data1$Gene1 <- as.character(lapply(strsplit(as.character(Data1$X1), "\\:"), "[", 2)) #split genes
+Data1$Gene2 <- as.character(lapply(strsplit(as.character(Data1$X1), "\\:"), "[", 1))
+Data1 <- Data1[,c(5,6,1,2,3,4)] #reorder columns
+Data1$X <- paste(Data1$Gene1,":",Data1$Gene2, sep = "") #generate new column with gene names reversed
+
+### Repeat for other datasets ###
+
+write.csv(Data1, "Data1_coexpr.csv") #you may want to save these to save time later
+#etc
+
+### Check distribution is normal. Remove any non-normal datasets
+hist(Data1$reg.mat, main = "Coexpression Distribution (Data1)", xlab = "Coexpression Value")
+hist(Data2$reg.mat, main = "Coexpression Distribution (Data2)", xlab = "Coexpression Value")
+hist(Data3$reg.mat, main = "Coexpression Distribution (Data3)", xlab = "Coexpression Value")
+hist(Data4$reg.mat, main = "Coexpression Distribution (Data4)", xlab = "Coexpression Value") 
+
+
+### Set a rho threshold. You may need to experiment to find the right threshold based on the number of output genes
+thresh <- 0.5
+### Filter by r value
+Data1_cor.5 <- Data1[Data1$reg.mat > thresh | Data1$reg.mat < -thresh,]
+Data2_cor.5 <- Data2[Data2$reg.mat > thresh | Data2$reg.mat < -thresh,]
+Data3_cor.5 <- Data3[Data3$reg.mat > thresh | Data3$reg.mat < -thresh,]
+Data4_cor.5 <- Data4[Data4$reg.mat > thresh | Data4$reg.mat < -thresh,]
+
+
+
+#Merge first two datasets. We match up gene names twice to take into account gene names may be in different orders
+#between two datasets e.g. in one dataset it's "Gene1:Gene2" and in another it is "Gene2:Gene1". This methodology
+#accommodates both
+
+corresult1 <- merge(DIJ_cor.5, FFR_cor.5, by.x = "X", by.y = "X")
+corresult2 <- merge(DIJ_cor.5, FFR_cor.5, by.x = "X1", by.y = "X")
+
+#Only take relevent columns
+corresult1 <- corresult1[, c(1:3, 6, 12)] #Take names, rho value for x and rho value for y
+corresult2 <- corresult2[, c(1:3, 7, 12)] #ditto
+colnames(corresult2)[1] <- "X" #rename so column names match between corresult1 and corresult 2 otherwise rbind won't work
+
+#bind one under the other
+result <- rbind(corresult1, corresult2)
+colnames(result) <- c("Correlation", "Gene1", "Gene2", "Data1", "Data2")
+
+#Merge with 3rd Dataset
+corresult3 <- merge(result, Data3, by.x = "Correlation", by.y = "X")
+corresult4 <- merge(result, Data3, by.x = "Correlation", by.y = "X1")
+
+corresult3 <- corresult3[, c(1:5, 10)] #Take names, rho values for Data1 and Data2, and rho value for y
+corresult4 <- corresult4[, c(1:5, 11)] #Take names, rho values for Data1 and Data2, and rho value for y
+
+result <- rbind(corresult3, corresult4)
+colnames(result) <- c("Correlation", "Gene1", "Gene2", "Data1", "Data2", "Data3")
+
+#Merge with 4th Dataset
+corresult5 <- merge(result, Data4, by.x = "Correlation", by.y = "X")
+corresult6 <- merge(result, Data4, by.x = "Correlation", by.y = "X1")
+
+corresult5 <- corresult5[, c(1:6, 11)]
+corresult6 <- corresult6[, c(1:6, 12)]
+
+result <- rbind(corresult5, corresult6)
+colnames(result) <- c("Correlation", "Gene1", "Gene2", "Data1", "Data2", "Data3", "Data4")
+
+#The result should be a matrix with a column for the edge, the two nodes, and rho values for each dataset
+
+CommonGroup <- result
+CommonGroup <- CommonGroup[!duplicated(CommonGroup[,1]),] #remove any duplicated values
+rownames(CommonGroup) <- CommonGroup$Correlation #make rownames edge label
+CommonGroup <- CommonGroup[,4:11] #only take rho values
+
+#conserve rows where all rho values are positive or all rho values are negative
+CG_conserved_up <- CommonGroup[apply(CommonGroup, MARGIN = 1, function(x) all(x > 0)), ]
+CG_conserved_down <- CommonGroup[apply(CommonGroup, MARGIN = 1, function(x) all(x < 0)), ]
+
+setwd("")
+CG_samedir <- rbind(CG_conserved_up, CG_conserved_down) #bind rogether
+CG_samedir$corMean <- rowMeans(CG_samedir, na.rm = FALSE, dims = 1) #generate a mean correlation value
+CG_samedir$Gene <- rownames(CG_samedir) #recreate edge column
+CG_samedir$Gene1 <- as.character(lapply(strsplit(as.character(CG_samedir$Gene), "\\:"), "[", 2)) #recreate gene column
+CG_samedir$Gene2 <- as.character(lapply(strsplit(as.character(CG_samedir$Gene), "\\:"), "[", 1)) #recreate gene column
+
+write.csv(CG_samedir, "originalcoexpressionnetwork.csv", quote = F, row.names = F)
+
+
+### Repeat this process for the filter files ###
+### You can subset filter files to only include genes in the experimental dataset. This will save you time ###
+
+############################################################################
+################# Filter Correlations ######################################
+###########################################################################
+
+original <- read.csv("original_correlation_network.csv")
+control <- read.csv("control_correlation_network.csv")
+otherfilter <- read.csv("otherfilter_correlation network.csv")
+
+original$X2 <- paste(original$Gene1,":",original$Gene2, sep = "")
+control$X2 <- paste(control$Gene1,":",control$Gene2, sep = "")
+otherfilter$X2 <- paste(otherfilter$Gene1,":",ALS$Gene2, sep = "")
+
+#merge the original dataset individually with each separate filter dataset
+
+## Merge original and control
+corresult1 <- merge(original, control, by.x = "Gene", by.y = "Gene")
+corresult2 <- merge(original, control, by.x = "Gene", by.y = "X2")
+
+#Only take relevent columns
+corresult1 <- corresult1[, c(1, 8, 18)]
+corresult2 <- corresult2[, c(1, 8, 18)]
+
+#bind one under the other
+result_original <- rbind(corresult1, corresult2)
+colnames(result_control) <- c("Gene", "Original", "Control")
+
+## Merge original with otherfilter
+corresult3 <- merge(original, otherfilter, by.x = "Gene", by.y = "Gene")
+corresult4 <- merge(original, otherfilter, by.x = "Gene", by.y = "X2")
+
+corresult3 <- corresult3[, c(1, 8, 16)]
+corresult4 <- corresult4[, c(1, 8, 16)]
+
+result_otherfilter <- rbind(corresult3, corresult4)
+colnames(result_otherfilter) <- c("Gene", "Original", "ALS")
+
+
+####### Find consistent edges
+
+
+common_control <- result_control
+rownames(common_control) <- common_control$Gene #make gene rowname
+common_control <- common_control[,2:3] #only take Rho values
+common_control_up <- common_control[apply(common_control, MARGIN = 1, function(x) all(x > 0)), ] #find common positive
+common_control_down <- common_control[apply(common_control, MARGIN = 1, function(x) all(x < 0)), ] #fine common negative
+common_control_samedir <- rbind(common_control_up, common_control_down) #bind
+
+common_otherfilter <- result_otherfilter
+rownames(common_otherfilter) <- common_otherfilter$Gene
+common_otherfilter <- common_otherfilter[,2:3]
+common_otherfilter_up <- common_otherfilter[apply(common_otherfilter, MARGIN = 1, function(x) all(x > 0)), ]
+common_otherfilter_down <- common_otherfilter[apply(common_otherfilter, MARGIN = 1, function(x) all(x < 0)), ]
+common_otherfilter_samedir <- rbind(common_otherfilter_up, common_otherfilter_down)
+
+
+commonedge <- c(rownames(common_control_samedir), rownames(common_otherfilter_samedir)) #bind all edges known to overlap with a filter dataset
+commonedge <- commonedge[!duplicated(commonedge)] #remove any duplicates
+
+
+#### Remove edges from original network
+DS_network <- read.csv("originalcoexpressionnetwork.csv")
+
+DS_network = subset(DS_network, !(DS_network$Gene %in% commonedge))
+
+write.csv(DS_network, "DS6Network_postfilter.csv")
